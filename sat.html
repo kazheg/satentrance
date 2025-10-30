@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bài Test SAT - Reading & Writing</title>
+    <!-- Tải Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tải Firebase (Bắt buộc cho việc lưu điểm) -->
+    <script type="module">
+        // Import các hàm Firebase cần thiết
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, orderBy, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- CẤU HÌNH BẮT BUỘC ---
+        let db, auth, userId;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-sat-quiz';
+        const RESULTS_COLLECTION_PATH = `artifacts/${appId}/public/data/sat-results`;
+
+        try {
+            const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            // Bật log để debug (tùy chọn)
+            // setLogLevel('debug');
+
+            // Đăng nhập người dùng
+            onAuthStateChanged(auth, async (user) => {
+                if (!user) {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (authError) {
+                        console.error("Lỗi đăng nhập:", authError);
+                        displayMessage("Lỗi kết nối. Không thể lưu điểm.", true);
+                    }
+                }
+                userId = auth.currentUser ? auth.currentUser.uid : 'anonymous-' + crypto.randomUUID();
+            });
+
+        } catch (e) {
+            console.error("Lỗi khởi tạo Firebase:", e);
+            displayMessage("Không thể kết nối đến cơ sở dữ liệu để lưu điểm.", true);
+        }
+        // --- KẾT THÚC CẤU HÌNH ---
+
+
+        // --- DỮ LIỆU BÀI TEST ---
+
+        // Đáp án (Từ ảnh bạn cung cấp)
+        const correctAnswers = {
+            "q1": "A", "q2": "B", "q3": "A", "q4": "A", "q5": "A",
+            "q6": "C", "q7": "D", "q8": "C", "q9": "D", "q10": "A",
+            "q11": "C", "q12": "A", "q13": "C", "q14": "A", "q15": "C",
+            "q16": "B", "q17": "C", "q18": "C", "q19": "B", "q20": "D",
+            "q21": "D", "q22": "A", "q23": "D", "q24": "B", "q25": "D",
+            "q26": "B", "q27": "B"
+        };
+
+        // Câu hỏi (Từ file PDF)
+        const questions = [
+            {
+                id: "q1",
+                text: "Postcranial skeletal pneumaticity (PSP) refers to the presence of extensions of an animal's lungs and air sacs inside its bones. Though such structures do not typically fossilize, they are believed to have been present in Tyrannosaurus, Phuwiangosaurus, and other Cretaceous theropods and sauropods. To ______ PSP from fossils, researchers look for indicators such as large foramina (holes in bones).",
+                options: {
+                    A: "infer",
+                    B: "preserve",
+                    C: "acquire",
+                    D: "isolate"
+                }
+            },
+            {
+                id: "q2",
+                text: "In 2019, Iceland, which has strong democratic institutions, experienced an inflation rate of 3.01%, much higher than the 0.76% rate seen in Jordan, which has relatively weak democratic institutions. Such a result is ______ however: Raj Desai et al. have shown that democratic institution strength tends to restrain inflationary pressures.",
+                options: {
+                    A: "facetious",
+                    B: "anomalous",
+                    C: "inexplicable",
+                    D: "unfounded"
+                }
+            },
+            {
+                id: "q3",
+                text: "Some robots such as HOAP (developed in 2001) and NimbRo (developed in 2012) are designed to resemble humans so that people will find it easier to interact with them. To that end, certain features such as the ability to respond to voice commands can help to ______ the effect of the more unnatural aspects of a robot's appearance, but a robot that looks too human can fall into the \"uncanny valley,\" meaning that its appearance unintentionally unsettles those who encounter it.",
+                options: {
+                    A: "ameliorate",
+                    B: "substantiate",
+                    C: "augment",
+                    D: "coalesce"
+                }
+            },
+            {
+                id: "q4",
+                text: "Demosthenes, a prominent fourth-century BCE Athenian orator, is said to have been ______ of parrhesia, or speaking freely and openly to ensure productive civic deliberation. He is noted for characterizing parrhesia in several public addresses as the foundation of democracy in classical Athens rather than, more simply, as a facilitator of the political system.",
+                options: {
+                    A: "a proponent",
+                    B: "a harbinger",
+                    C: "a steward",
+                    D: "an apprentice"
+                }
+            },
+            {
+                id: "q5",
+                text: "Curtis Arnett's Two Birds, a wetland landscape prominently featuring a lone tree and waterbirds against the backdrop of a striking green and orange sky, is typical of paintings by the Florida Highwaymen, loosely affiliated landscape artists mainly active in Fort Pierce, Florida, during the 1950s and '60s. Some art historians suggest that Highwaymen paintings played a role in shaping popular perceptions of the state that persist today: the natural iconography that Arnett and colleagues constantly revisited-lush tropical forests, vivid sunsets-is now seen as classically Floridian.\n\nWhich choice best states the main purpose of the text?",
+                options: {
+                    A: "To present the argument that paintings by the Florida Highwaymen likely helped to create a particular widespread impression of Florida",
+                    B: "To describe the historical circumstances in which paintings by the Florida Highwaymen experienced a resurgence in popularity",
+                    C: "To explain that a particular painting by Curtis Arnett has had greater influence on the broader culture of the state of Florida than is generally acknowledged",
+                    D: "To contrast the public's reaction during the 1950s and '60s to a particular painting by Curtis Arnett with more recent reactions to it"
+                }
+            },
+            {
+                id: "q6",
+                text: "Chorioactis geaster, a species of mushroom that makes a distinctive hissing sound when it releases its spores, is an elusive fungus that has been observed only in Texas and Oklahoma in the US and in the Miyazaki and Nara Prefectures in Japan. Scientists aren't entirely sure why C. geaster is distributed in this way (genetic analysis reveals that the US and Japanese strains diverged 19 million years ago), <u>but the mushroom appears to be very selective: it is typically found on the decaying stumps and roots of only a few tree species that are abundant in these areas.</u>\n\nWhich choice best describes the function of the underlined portion in the text as a whole?",
+                options: {
+                    A: "It highlights the negative impact C. geaster has on the trees on which it's found.",
+                    B: "It elaborates on a characterization of C. geaster presented earlier in the text.",
+                    C: "It emphasizes the uncertainty about C. geaster alluded to earlier in the text.",
+                    D: "It provides an explanation for the relationship between C. geaster and its habitats."
+                }
+            },
+            {
+                id: "q7",
+                text: "In Costa Rica, use of solid fuel (e.g., coal, wood) as a share of total household fuel use fell by approximately 60 percent between 2000 and 2019; such shifts are often explained by appeal to the energy ladder, a model holding that fuel choice is mediated mainly by household income (specifically, high-technology fuels displace solid fuels as incomes rise). Rasmus Heltberg's study of fuel use in Guatemala shows this model to be reductive, however: household fuel use was heterogeneous, flexible, and influenced by several factors, including the local prices of different fuel sources.\n\nWhich choice best describes the main purpose of the text?",
+                options: {
+                    A: "To critique a frequently used model of changes in household fuel prices",
+                    B: "To account for the effect of fuel use on household income",
+                    C: "To contrast patterns in household fuel use in two countries",
+                    D: "To challenge a common explanation for households' fuel choices"
+                }
+            },
+            {
+                id: "q8",
+                text: "The following text is adapted from Fanny Burney's 1778 novel Evelina. The text is an excerpt from a letter by Lady Howard to Evelina's guardian, Reverend Villars, in which Lady Howard discusses an upcoming trip to London planned by her daughter Mrs. Mirvan's family.\n\n<i>It is very earnestly [the Mirvans'] wish to enlarge and enliven their party by the addition of your amiable ward, who would share, equally with her own daughter, the care and attention of Mrs. Mirvan. Do not start at this proposal; it is time that [Evelina] should see something of the world. When young people are too rigidly sequestered from it, their lively and romantic imaginations paint it to them as a paradise of which they have been beguiled; but when they are shown it properly, and in due time, they see it such as it really is, equally shared by pain and pleasure, hope and disappointment.</i>\n\nBased on the text, Lady Howard would most likely agree with which statement about Reverend Villars?",
+                options: {
+                    A: "Although his desire to guard Evelina from unscrupulous people is commendable, his general mistrust has led him to be unduly wary of the Mirvans.",
+                    B: "Although the manner in which he has raised Evelina is in many ways exemplary, he has been misguided in shielding her from the influence of other young people.",
+                    C: "He is overly protective of Evelina, who would likely benefit from a greater variety of experiences than she has had thus far.",
+                    D: "He has imparted to Evelina his own idealistic view of the world, which results in her being unprepared to face inevitable disappointments."
+                }
+            },
+            {
+                id: "q9",
+                text: "Many music streaming services also function as social media platforms: by giving users the option to follow friends and share curated playlists or information about their listening history, these platforms allow people to convey their music preferences and listening activities directly to their social networks. In a 2023 study, researcher Michael James Walsh interviewed frequent users of a popular music streaming platform to investigate how its social media dimensions shape their listening habits. Walsh found that these dimensions tended to make study participants feel more mindful of how their listening activities may be perceived, which in turn influenced how they managed those activities.\n\nWhich quotation from a music streaming platform user would best illustrate Walsh's finding?",
+                options: {
+                    A: "\"Listening to music through a streaming platform feels a lot more passive, since I don't need to make any deliberate choices about what music I'm going to consume, like I do when buying digital downloads or records and CDs.\"",
+                    B: "\"Because the predictions the platform makes about what new songs I might like depend on my past listening habits, at times its recommendations can feel overly repetitive and unvarying.\"",
+                    C: "\"The social aspects of music streaming make it really easy to create a sense of a shared listening experience with my friends, even if we aren't in the same room.\"",
+                    D: "\"When I create playlists or choose songs to listen to, I often pick songs that I think the friends who are following me might be interested in listening to, rather than what I might actually prefer listening to in that moment.\""
+                }
+            },
+            {
+                id: "q10",
+                text: "A student is writing a research paper on the history of irrigation in the southwestern United States, situating the development of the Modesto Reservoir (a man-made body of water created in Stanislaus County, California, in 1911) in a larger historical context. The student claims that some modern-day irrigation methods used in southwestern states, such as California, Arizona, and New Mexico, have a lineage that long predates the completion of the Modesto Reservoir.\n\nWhich quotation from a historian best supports the student's claim?",
+                options: {
+                    A: "\"The irrigation system developed by the Hohokam people in what is now central Arizona in the 7th century CE was simple but made use of hydraulic engineering design principles that are still utilized by today's engineers.\"",
+                    B: "\"In the decades following the Second World War, irrigation of arid areas for agriculture increased to such a degree that it now accounts for roughly 70% of the world's water usage.\"",
+                    C: "\"The importance of the development of irrigation infrastructure in the American Southwest today cannot be overstated, since it is the most common means of conveying water for food production.\"",
+                    D: "\"Sprinkler irrigation systems, which were developed in the late 20th century, are a convenient technique of irrigating that makes use of machinery in order to spray water in all directions. Many areas of the Southwestern United States are currently irrigated by this method.\""
+                }
+            },
+            {
+                id: "q11",
+                text: `
+<p class="mb-2">Properties of TRAPPIST-1 Exoplanets Compared to Earth's Properties</p>
+<pre class="bg-gray-100 p-3 rounded-md text-sm whitespace-pre-wrap">
+"Planet       ","Orbital period (days) ","Planet radius (Earth radii) "
+"Earth        ","365.26                ","1                             "
+"TRAPPIST-1b  ","1.51                  ","1.09                          "
+"TRAPPIST-1d  ","4.05                  ","0.77                          "
+"TRAPPIST-1e  ","6.1                   ","0.92                          "
+</pre>
+<p class="mt-4">TRAPPIST-1 is a planetary system with a central red dwarf star and several Earth-sized exoplanets. Each planet in this system is so close in orbit to the star that the gravitational forces acting between the planet and the star cause the planet's rotational period around its axis and orbital period around the star to be equal. For example, the orbital period of TRAPPIST-le is ______</p>
+<p class="mt-4">Which choice most effectively uses data from the table to complete the example?</p>
+`,
+                options: {
+                    A: "9.21 days, which is the same as the rotational period of TRAPPIST-1f.",
+                    B: "1.51 days, which is the shortest rotational period of any of the TRAPPIST planets.",
+                    C: "6.1 days, and its rotational period is also 6.1 days.",
+                    D: "6.1 days, and its rotational period is 0.92 days."
+                }
+            },
+            {
+                id: "q12",
+                text: "The Clouds is a 423 BCE play by Aristophanes, originally written in ancient Greek. At the time, professional intellectuals called sophists taught customers rhetorical techniques to use in public speaking, along with providing instruction in other subjects. In the play, Aristophanes satirizes sophists as having an exaggerated sense of their own wisdom, as seen when the character ______\n\nWhich choice most effectively uses a quotation from a translation of The Clouds to illustrate the claim?",
+                options: {
+                    A: "Socrates, a sophist, says to a new customer, \"Come, then, take care that, whenever I propound any clever dogma about abstruse matters, you [seize] immediately.\"",
+                    B: "Socrates, a sophist, says to a customer, \"You straightaway forget whatever you learn. For what now was the first thing you were taught? Tell me.\"",
+                    C: "Strepsiades says of a sophist business, \"There dwell men who in speaking of the heavens persuade people that it is an oven, and that it encompasses us, and that we are the embers. These men teach, if one give them money, to conquer in speaking, right or wrong.\"",
+                    D: "Strepsiades encourages his son to learn to be a sophist, saying, \"Reform your habits as quickly as possible, and go and learn what I advise.\""
+                }
+            },
+            {
+                id: "q13",
+                text: "Life Among the Paiutes is an 1882 autobiographical narrative by Sarah Winnemucca Hopkins, a Northern Paiute author, educator, and activist. In the work, Winnemucca directly addresses the reader to explain certain customs, writing ______\n\nWhich quotation from Life Among the Paiutes most effectively illustrates the claim?",
+                options: {
+                    A: "\"We would all go in company to see if the flowers we were named for were yet in bloom, for almost all the girls are named for flowers.\"",
+                    B: "\"We left Stockton and went on farther to a place called San Joaquin River. It took us only one day to go there. We only crossed that river at that time.\"",
+                    C: "\"Now, my dear reader, there is no word so endearing as the word father, and that is why [my people] call all good people father or mother.\"",
+                    D: "\"But how can I describe the scene that followed? Some of you, dear readers, can imagine.\""
+                }
+            },
+            {
+                id: "q14",
+                text: "Omar Asensio and colleagues used machine-learning algorithms to examine consumer reviews of 12,720 electric-vehicle (EV) charging stations in the US. They found that privately owned or managed charging stations at or near restaurants and convenience stores had relatively low proportions of negative reviews, while stations at or near residences had significantly higher proportions of negative reviews. Additionally, stations at or near residences tend to require consumers to pay full price to use them, while stations elsewhere often offer subsidized or even complimentary charging. Assuming that stations at different sites provide roughly equivalent levels of service, these results suggest that ______\n\nWhich choice most logically completes the text?",
+                options: {
+                    A: "users who are offered a discount have lower expectations of the quality of charging stations than users who are not offered a discount do.",
+                    B: "charging stations located near residences are more frequently visited than charging stations located near restaurants and convenience stores.",
+                    C: "EV drivers are more likely to visit areas with many restaurants and convenience stores than they are to visit areas with fewer such businesses.",
+                    D: "EV owners are usually unaware of the fees for using charging stations."
+                }
+            },
+            {
+                id: "q15",
+                text: "Many contemporary Indigenous painters practice a specifically Indigenous mode of abstraction; for example, Jeffrey Gibson assembles compositions out of motifs common in beadwork and other traditional Indigenous art forms. In contrast, the prominent Indigenous practitioners of abstract painting during the mid-twentieth century, such as the Cherokee artist Edna Massey, typically aligned their compositional strategies with Abstract Expressionism- a school of painting dominated by European American artists-instead of with traditionally nonrepresentational forms of Indigenous art. Thus, in the case of Massey's generation, the identification of an abstract painting as Indigenous art tends to ______\n\nWhich choice most logically completes the text?",
+                options: {
+                    A: "obscure the Indigenous origins of certain motifs associated with Abstract Expressionism.",
+                    B: "deny the extent to which cultural identity influences an artist's work.",
+                    C: "depend not on stylistic details but instead on an awareness of the artist's identity.",
+                    D: "place a greater emphasis on the artist's biography than on the aesthetic merit of the painting."
+                }
+            },
+            {
+                id: "q16",
+                text: "In rural Minnesota, ecologist Leroy Walston conducted a study to determine whether seeding solar panel fields with wildflowers could bolster pollinator populations in nearby food crops. Walston's findings indicate that- assuming solar panel installers' ______ practice has the potential to increase the number of native bees in crops near solar fields throughout the Midwest by up to 20 percent.",
+                options: {
+                    A: "cooperation: this",
+                    B: "cooperation-this",
+                    C: "cooperation, this",
+                    D: "cooperation this"
+                }
+            },
+            {
+                id: "q17",
+                text: "George Saunders concludes his essay \"What Writers Really Do When They Write\" by comparing the work of fiction writing to the act of juggling. The author-as-juggler performs a ______ gathering of central themes and tensions, the tossing of these elements into a dynamic narrative, and the catching of the resolutions that emerge.",
+                options: {
+                    A: "routine, the",
+                    B: "routine. The",
+                    C: "routine: the",
+                    D: "routine; the"
+                }
+            },
+            {
+                id: "q18",
+                text: "The Balkan nation of Bosnia and Herzegovina does not have one president but ______ as members of the office of the presidency, one representing the nation's Bosniaks, one its Serbs, and one its Croats, these elected officials take turns serving as the office's chairperson.",
+                options: {
+                    A: "three, who are known",
+                    B: "three, known",
+                    C: "three. Known",
+                    D: "three who are known"
+                }
+            },
+            {
+                id: "q19",
+                text: "In her work, Millbrook Mi'kmaq artist Teresa Marshall uses sculptures and installation pieces to amplify stories of Canada's First Nations people. Since 1989, Indianapolis's Eiteljorg Museum has celebrated the work of groundbreaking contemporary Native ______ in 2001, it awarded Marshall one of its prestigious artist fellowships.",
+                options: {
+                    A: "artists,",
+                    B: "artists;",
+                    C: "artists and",
+                    D: "artists, thus"
+                }
+            },
+            {
+                id: "q20",
+                text: "If an animal can recognize itself in a reflective surface (\"the mirror test\"), it is considered to have self-awareness. In a recent study, scientists ______ for evidence of self-awareness in snakes, species that rely primarily on olfactory rather than visual processing, adapted the test to foreground smell, modifying the scent trails of North American eastern garter snakes and African ball pythons.",
+                options: {
+                    A: "searched",
+                    B: "have searched",
+                    C: "were searching",
+                    D: "searching"
+                }
+            },
+            {
+                id: "q21",
+                text: "The parks of Austin, Texas, seem to be making people happier. In 2022, a team of researchers ______ to find connections between the physical location in which a social media post was created and the content of that post analyzed geotagged social media posts from various sites in Austin. The team found that posts from the city's parks contained more words associated with happiness than did the other posts.",
+                options: {
+                    A: "hoped",
+                    B: "were hoping",
+                    C: "was hoping",
+                    D: "hoping"
+                }
+            },
+            {
+                id: "q22",
+                text: "A team of ornithologists documented patterns of conspecific brood parasitism among wood ducks (Aix sponsa) in California. The researchers observed several female wood ducks visiting dozens of nesting sites and laying eggs to be incubated by other nesting A. sponsa. Subject 7F64B, ______, visited a select few nesting sites before laying and incubating her eggs herself.",
+                options: {
+                    A: "alternatively,",
+                    B: "for example,",
+                    C: "in particular,",
+                    D: "similarly,"
+                }
+            },
+            {
+                id: "q23",
+                text: "Researchers in France claim that leopards and brown bears are among the twenty most \"charismatic\" animals (defined as \"attractive, fascinating, or appealing\"). To create their top-twenty list, researchers used survey data from Western Europe. ______, European attitudes toward leopards and brown bears might not be shared around the world,",
+                options: {
+                    A: "in other words.",
+                    B: "in particular.",
+                    C: "for example.",
+                    D: "of course."
+                }
+            },
+            {
+                id: "q24",
+                text: "While researching a topic, a student has taken the following notes:\n- \"Organ²/ASLSP (As Slow as Possible)\" is a musical piece by avant-garde composer John Cage.\n- A specially designed automated organ in St. Burchardi Church in Halberstadt, Germany, began playing the piece in 2001.\n- It is scheduled to stop playing the piece in 2640.\n- The performance will last 639 years.\n- It will be the longest continuous musical performance in history.\n\nThe student wants to indicate how long John Cage's musical piece will last. Which choice most effectively uses relevant information from the notes to accomplish this goal?",
+                options: {
+                    A: "An organ in St. Burchardi Church in Halberstadt, Germany, began playing a musical piece by avant-garde composer John Cage.",
+                    B: "Lasting 639 years, John Cage's musical piece will be the longest continuous musical performance in history.",
+                    C: "\"Organ²/ASLSP (As Slow as Possible)\" is a musical piece currently being played in St. Burchardi Church in Halberstadt, Germany.",
+                    D: "John Cage is the composer of the musical piece \"Organ²/ASLSP (As Slow as Possible).\""
+                }
+            },
+            {
+                id: "q25",
+                text: "While researching a topic, a student has taken the following notes:\n- The El Tigre Mountains are located in northwestern Mexico.\n- They cover an area of 1,386 square miles (mi²).\n- The Sierrita Mountains are located in the southwestern United States.\n- They cover an area of 63 mi².\n- These mountain ranges are two of the dozens of \"sky islands\" in the southwestern US and northwestern Mexico.\n- A sky island is an isolated mountain range whose environment differs drastically from that of the surrounding lowlands.\n\nThe student wants to compare the sizes of the two mountain ranges. Which choice most effectively uses relevant information from the notes to accomplish this goal?",
+                options: {
+                    A: "The El Tigre Mountains and the Sierrita Mountains are both isolated mountain ranges whose environments differ drastically from that of the surrounding lowlands.",
+                    B: "There are dozens of isolated mountain ranges located in the southwestern US and northwestern Mexico.",
+                    C: "Sky islands in northwestern Mexico and the southwestern US can vary in size.",
+                    D: "In terms of area, the El Tigre Mountains (which cover 1,386 mi²) are larger than the Sierrita Mountains (63 mi²)."
+                }
+            },
+            {
+                id: "q26",
+                text: "While researching a topic, a student has taken the following notes:\n- Marguerite Wildenhain was a ceramicist and author born in Lyon, France.\n- She began attending the Bauhaus in 1919.\n- The Bauhaus was an influential German art and design school.\n- The school famously espoused the design principle of \"form follows function.\"\n- \"Form follows function\" means that an object's shape should be determined primarily by its intended purpose.\n\nThe student wants to explain the principle espoused by the Bauhaus. Which choice most effectively uses relevant information from the notes to accomplish this goal?",
+                options: {
+                    A: "Famous for its principle of \"form follows function,\" the Bauhaus was an influential German art and design school.",
+                    B: "According to the Bauhaus, an object's intended purpose (function) should primarily determine its shape (form).",
+                    C: "Marguerite Wildenhain was a ceramicist and author who attended the Bauhaus, famous for espousing the principle of \"form follows function.\"",
+                    D: "An object's intended purpose and its shape are two elements of the design principle \"form follows function.\""
+                }
+            },
+            {
+                id: "q27",
+                text: "While researching a topic, a student has taken the following notes:\n- Steven Jackson and Eddie George had historic careers as running backs in the National Football League (NFL).\n- The running back position entails running, or rushing, down the field with the football to gain yards for the team.\n- Steven Jackson gained a total of 11,438 rushing yards in his career.\n- He played for the St. Louis Rams, the Atlanta Falcons, and the New England Patriots.\n- Eddie George gained a total of 10,441 rushing yards in his career.\n- He played for the Houston Oilers, the Tennessee Titans, and the Dallas Cowboys.\n\nWhich choice most effectively uses information from the given sentences to begin a narrative about one of the athletes?",
+                options: {
+                    A: "While Jackson finished his career with more rushing yards, both Jackson and George reached the career milestone of rushing for over 10,000 yards total.",
+                    B: "When Jackson put on his St. Louis Rams uniform for his first NFL game, he began what would become a legendary professional career.",
+                    C: "Jackson began his career with the St. Louis Rams; George started with Houston Oilers.",
+                    D: "Jackson's blend of speed, power, and agility helped him accrue 11,438 rushing yards by the end of his career, etching his name into the NFL's record books."
+                }
+            }
+        ];
+
+
+        // --- LỌC LOGIC ỨNG DỤNG ---
+
+        let currentStudentName = "";
+        let unsubscribeFromResults = null; // Biến để theo dõi listener của Firestore
+
+        // Hàm đợi DOM sẵn sàng
+        document.addEventListener("DOMContentLoaded", () => {
+            // Lấy các phần tử DOM
+            const loginView = document.getElementById("login-view");
+            const quizView = document.getElementById("quiz-view");
+            const resultView = document.getElementById("result-view");
+            const teacherView = document.getElementById("teacher-view");
+            const messageModal = document.getElementById("message-modal");
+            const messageText = document.getElementById("message-text");
+            const closeMessageBtn = document.getElementById("close-message-btn");
+
+            const studentNameInput = document.getElementById("student-name");
+            const startQuizBtn = document.getElementById("start-quiz-btn");
+            const quizForm = document.getElementById("quiz-form");
+            const questionsContainer = document.getElementById("questions-container");
+            const studentNameDisplay = document.getElementById("student-name-display");
+            const scoreDisplay = document.getElementById("score-display");
+            const retakeQuizBtn = document.getElementById("retake-quiz-btn");
+
+            const studentTab = document.getElementById("student-tab");
+            const teacherTab = document.getElementById("teacher-tab");
+            const resultsTbody = document.getElementById("results-tbody");
+
+            // Hàm hiển thị thông báo
+            window.displayMessage = (message, isError = false) => {
+                messageText.textContent = message;
+                messageModal.classList.remove("hidden");
+                if (isError) {
+                    messageText.classList.add("text-red-700");
+                } else {
+                    messageText.classList.remove("text-red-700");
+                }
+            }
+            closeMessageBtn.onclick = () => messageModal.classList.add("hidden");
+
+            // Hàm chuyển đổi qua lại giữa các màn hình
+            const showView = (viewId) => {
+                [loginView, quizView, resultView, teacherView].forEach(view => view.classList.add("hidden"));
+                document.getElementById(viewId).classList.remove("hidden");
+
+                // Cập nhật trạng thái active của Tab
+                if (viewId === 'teacher-view') {
+                    teacherTab.classList.add("border-blue-500", "text-blue-600");
+                    teacherTab.classList.remove("border-transparent", "hover:text-gray-600");
+                    studentTab.classList.add("border-transparent", "hover:text-gray-600");
+                    studentTab.classList.remove("border-blue-500", "text-blue-600");
+                } else {
+                    studentTab.classList.add("border-blue-500", "text-blue-600");
+                    studentTab.classList.remove("border-transparent", "hover:text-gray-600");
+                    teacherTab.classList.add("border-transparent", "hover:text-gray-600");
+                    teacherTab.classList.remove("border-blue-500", "text-blue-600");
+                }
+            };
+
+            // Tạo giao diện câu hỏi
+            const renderQuestions = () => {
+                questionsContainer.innerHTML = ""; // Xóa câu hỏi cũ
+                questions.forEach((q, index) => {
+                    // Tạo HTML cho các lựa chọn
+                    const optionsHTML = Object.entries(q.options).map(([key, value]) => `
+                        <label for="${q.id}-${key}" class="flex items-start p-3 -mt-px border border-gray-200 rounded-b-lg cursor-pointer hover:bg-gray-50">
+                            <input type="radio" id="${q.id}-${key}" name="${q.id}" value="${key}" class="w-4 h-4 mt-1 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500 focus:ring-2" required>
+                            <span class="ml-3 text-sm font-medium text-gray-900">${key}. ${value}</span>
+                        </label>
+                    `).join("");
+
+                    // Tạo HTML cho câu hỏi
+                    const questionHTML = `
+                        <div class="mb-8 bg-white shadow-md rounded-lg overflow-hidden">
+                            <!-- Tiêu đề câu hỏi -->
+                            <div class="p-4 bg-gray-50 border-b border-gray-200">
+                                <p class="font-semibold text-gray-800">Câu ${index + 1}:</p>
+                            </div>
+                            <!-- Nội dung câu hỏi -->
+                            <div class="p-4 text-gray-700 leading-relaxed whitespace-pre-line">
+                                ${q.text}
+                            </div>
+                            <!-- Các lựa chọn -->
+                            <div class="px-4 pb-4">
+                                <div class="border border-gray-200 rounded-lg">
+                                    ${optionsHTML}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    questionsContainer.innerHTML += questionHTML;
+                });
+            };
+
+            // Xử lý sự kiện bắt đầu làm bài
+            startQuizBtn.onclick = () => {
+                currentStudentName = studentNameInput.value.trim();
+                if (currentStudentName === "") {
+                    displayMessage("Vui lòng nhập tên của bạn.", true);
+                    return;
+                }
+                studentNameDisplay.textContent = `Chúc may mắn, ${currentStudentName}!`;
+                renderQuestions(); // Tạo câu hỏi
+                showView("quiz-view");
+            };
+
+            // Xử lý sự kiện nộp bài
+            quizForm.onsubmit = async (e) => {
+                e.preventDefault();
+                displayMessage("Đang nộp bài, vui lòng chờ...");
+
+                const formData = new FormData(quizForm);
+                let score = 0;
+                let userAnswers = {};
+
+                for (const q of questions) {
+                    const answer = formData.get(q.id);
+                    userAnswers[q.id] = answer;
+                    if (answer === correctAnswers[q.id]) {
+                        score++;
+                    }
+                }
+
+                const resultData = {
+                    studentName: currentStudentName,
+                    score: score,
+                    total: questions.length,
+                    submittedAt: new Date().toISOString(), // Lưu dạng ISO string
+                    userId: userId // Lưu userId để tham khảo (nếu cần)
+                };
+
+                // Lưu kết quả vào Firestore
+                try {
+                    if (!db) throw new Error("Kết nối cơ sở dữ liệu chưa sẵn sàng.");
+                    
+                    const docRef = await addDoc(collection(db, RESULTS_COLLECTION_PATH), resultData);
+                    console.log("Đã lưu kết quả với ID: ", docRef.id);
+                    
+                    // Hiển thị kết quả
+                    scoreDisplay.textContent = `Bạn đã trả lời đúng ${score} / ${questions.length} câu.`;
+                    showView("result-view");
+                    messageModal.classList.add("hidden"); // Ẩn thông báo "Đang nộp bài"
+
+                } catch (error) {
+                    console.error("Lỗi khi lưu điểm:", error);
+                    displayMessage(`Không thể lưu điểm của bạn. Lỗi: ${error.message}`, true);
+                }
+            };
+
+            // Xử lý sự kiện làm lại bài
+            retakeQuizBtn.onclick = () => {
+                studentNameInput.value = ""; // Xóa tên
+                quizForm.reset(); // Reset form
+                showView("login-view");
+            };
+
+            // Xử lý sự kiện xem bảng điểm (Giáo viên)
+            teacherTab.onclick = () => {
+                showView("teacher-view");
+                
+                // Hủy đăng ký listener cũ (nếu có) để tránh rò rỉ bộ nhớ
+                if (unsubscribeFromResults) {
+                    unsubscribeFromResults();
+                }
+
+                // Nếu chưa kết nối DB thì không làm gì cả
+                if (!db) {
+                    resultsTbody.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-red-500">Chưa kết nối đến cơ sở dữ liệu.</td></tr>';
+                    return;
+                }
+
+                // Tạo query (sắp xếp theo thời gian mới nhất)
+                // LƯU Ý: Firestore có thể yêu cầu tạo chỉ mục (index) cho việc sắp xếp này.
+                // Nếu thấy lỗi trên console, hãy theo link lỗi để tạo chỉ mục.
+                // Tạm thời, chúng ta sẽ tải và sắp xếp phía client để tránh lỗi index.
+                const q = query(collection(db, RESULTS_COLLECTION_PATH));
+                
+                resultsTbody.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">Đang tải điểm...</td></tr>';
+
+                // Lắng nghe thay đổi thời gian thực
+                unsubscribeFromResults = onSnapshot(q, (snapshot) => {
+                    if (snapshot.empty) {
+                        resultsTbody.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">Chưa có học sinh nào nộp bài.</td></tr>';
+                        return;
+                    }
+
+                    // Sắp xếp dữ liệu phía client theo thời gian nộp
+                    const results = snapshot.docs.map(doc => doc.data());
+                    results.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+
+                    resultsTbody.innerHTML = ""; // Xóa bảng
+                    results.forEach(data => {
+                        const submittedDate = new Date(data.submittedAt);
+                        const formattedDate = `${submittedDate.toLocaleDateString('vi-VN')} ${submittedDate.toLocaleTimeString('vi-VN')}`;
+                        
+                        const row = `
+                            <tr class="bg-white border-b hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
+                                    ${data.studentName}
+                                </td>
+                                <td class="px-6 py-4 text-gray-700">
+                                    ${data.score} / ${data.total}
+                                </td>
+                                <td class="px-6 py-4 text-gray-700">
+                                    ${formattedDate}
+                                </td>
+                            </tr>
+                        `;
+                        resultsTbody.innerHTML += row;
+                    });
+                }, (error) => {
+                    console.error("Lỗi khi tải bảng điểm:", error);
+                    resultsTbody.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-red-500">Lỗi tải bảng điểm: ${error.message}</td></tr>`;
+                });
+            };
+
+            // Xử lý sự kiện quay lại tab học sinh
+            studentTab.onclick = () => {
+                // Hủy đăng ký listener của giáo viên
+                if (unsubscribeFromResults) {
+                    unsubscribeFromResults();
+                    unsubscribeFromResults = null;
+                }
+                
+                // Quay lại màn hình đăng nhập
+                quizForm.reset();
+                showView("login-view");
+            };
+
+        });
+    </script>
+    <style>
+        /* Sử dụng font Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f6; /* Màu nền nhẹ nhàng */
+        }
+        /* Cải thiện hiển thị pre-tag (cho câu 11) */
+        pre {
+            font-family: 'Courier New', Courier, monospace;
+        }
+        /* Cải thiện radio button */
+        input[type="radio"]:checked + span {
+            color: #2563eb; /* text-blue-600 */
+        }
+    </style>
+</head>
+<body class="antialiased text-gray-800">
+
+    <!-- Container chính -->
+    <div class="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- Tiêu đề ứng dụng -->
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-blue-700">Bài Test SAT</h1>
+            <p class="text-lg text-gray-600">Reading & Writing (Module 2)</p>
+        </header>
+
+        <!-- Thanh Tabs điều hướng -->
+        <div class="mb-6 border-b border-gray-200">
+            <ul class="flex flex-wrap -mb-px text-sm font-medium text-center text-gray-500">
+                <li class="mr-2">
+                    <button id="student-tab" class="inline-block p-4 border-b-2 rounded-t-lg border-blue-500 text-blue-600" type="button">
+                        Làm Bài (Học sinh)
+                    </button>
+                </li>
+                <li>
+                    <button id="teacher-tab" class="inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300" type="button">
+                        Xem Điểm (Giáo viên)
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Vùng nội dung chính -->
+        <main id="content-area">
+
+            <!-- Màn hình 1: Đăng nhập (Học sinh) -->
+            <div id="login-view" class="bg-white p-8 rounded-lg shadow-lg">
+                <h2 class="text-2xl font-semibold text-center mb-6">Chào mừng!</h2>
+                <div class="max-w-sm mx-auto">
+                    <label for="student-name" class="block mb-2 text-sm font-medium text-gray-900">Vui lòng nhập tên của bạn:</label>
+                    <input type_ "text" id="student-name" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Ví dụ: Nguyễn Văn A" required>
+                    <button id="start-quiz-btn" class="mt-6 w-full text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-colors duration-200">
+                        Bắt đầu làm bài
+                    </button>
+                </div>
+            </div>
+
+            <!-- Màn hình 2: Làm bài (Học sinh) -->
+            <div id="quiz-view" class="hidden">
+                <h2 id="student-name-display" class="text-xl font-semibold mb-6 text-gray-700"></h2>
+                <form id="quiz-form">
+                    <div id="questions-container">
+                        <!-- Câu hỏi sẽ được chèn vào đây bằng JS -->
+                    </div>
+                    <button type="submit" class="w-full mt-6 text-white bg-green-600 hover:bg-green-700 focus:ring-4 focus:outline-none focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-3 text-center transition-colors duration-200">
+                        NỘP BÀI VÀ XEM KẾT QUẢ
+                    </button>
+                </form>
+            </div>
+
+            <!-- Màn hình 3: Kết quả (Học sinh) -->
+            <div id="result-view" class="hidden bg-white p-8 rounded-lg shadow-lg text-center">
+                <h2 class="text-2xl font-semibold mb-4 text-blue-700">Hoàn thành!</h2>
+                <p id="score-display" class="text-3xl font-bold text-gray-800 mb-6"></p>
+                <p class="text-gray-600 mb-6">Kết quả của bạn đã được lưu lại.</p>
+                <button id="retake-quiz-btn" class="text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition-colors duration-200">
+                    Làm lại bài khác
+                </button>
+            </div>
+
+            <!-- Màn hình 4: Bảng điểm (Giáo viên) -->
+            <div id="teacher-view" class="hidden">
+                <h2 class="text-2xl font-semibold mb-6 text-gray-800">Bảng điểm của Lớp</h2>
+                <div class="relative overflow-x-auto shadow-md rounded-lg">
+                    <table id="results-table" class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                            <tr>
+                                <th scope="col" class="px-6 py-3">
+                                    Tên Học sinh
+                                </th>
+                                <th scope="col" class="px-6 py-3">
+                                    Điểm số
+                                </th>
+                                <th scope="col" class="px-6 py-3">
+                                    Thời gian nộp
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-tbody">
+                            <!-- Kết quả sẽ được chèn vào đây bằng JS -->
+                            <tr>
+                                <td colspan="3" class="px-6 py-4 text-center">Chưa có dữ liệu.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Modal Thông báo (Loading/Error) -->
+    <div id="message-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full text-center">
+            <p id="message-text" class="text-lg font-medium text-gray-800"></p>
+            <button id="close-message-btn" class="mt-4 text-sm text-blue-600 hover:text-blue-800">Đóng</button>
+        </div>
+    </div>
+
+</body>
+</html>
